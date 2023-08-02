@@ -1,40 +1,52 @@
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.net.ServerSocket;
-import java.net.Socket;
+import org.apache.camel.CamelContext;
+import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.impl.DefaultCamelContext;
 
 public class IEC104Client {
 
     public static void main(String[] args) {
         try {
-            // Создание серверного сокета для прослушивания входящих соединений
-            ServerSocket serverSocket = new ServerSocket(8080);
+            // Создание экземпляра CamelContext
+            CamelContext context = new DefaultCamelContext();
 
-            while (true) {
-                // Ожидание клиентского подключения
-                Socket clientSocket = serverSocket.accept();
-
-                // Чтение данных из сокета
-                DataInputStream inputStream = new DataInputStream(clientSocket.getInputStream());
-
-                // Обработка пакетов
-                while (true) {
-                    byte[] packetData = new byte[1024];
-                    int bytesRead = inputStream.read(packetData);
-
-                    if (bytesRead == -1) {
-                        // Клиент разорвал соединение
-                        break;
-                    }
-
-                    // Вывод информации о пакете
-                    System.out.println("Received packet: " + new String(packetData, 0, bytesRead));
+            // Добавление маршрута для получения данных от сервера
+            context.addRoutes(new RouteBuilder() {
+                @Override
+                public void configure() throws Exception {
+                    from("iec60870-client:127.0.0.1:2404/00-01-02-03-04")
+                            .to("log:iec104-client")
+                            .to("direct:processData");
                 }
+            });
 
-                // Закрытие клиентского сокета
-                clientSocket.close();
-            }
-        } catch (IOException e) {
+            // Добавление маршрута для обработки полученных данных
+            context.addRoutes(new RouteBuilder() {
+                @Override
+                public void configure() throws Exception {
+                    from("direct:processData")
+                            .log("Processing data from server...")
+                            .process(exchange -> {
+                                // Получение пакета данных от сервера
+                                byte[] data = exchange.getIn().getBody(byte[].class);
+
+                                // Добавьте свою обработку данных здесь
+                                // Например, распаковка и анализ пакета данных
+
+                                // Вывод данных в консоль
+                                System.out.println("Received data from server: " + new String(data));
+                            });
+                }
+            });
+
+            // Запуск CamelContext
+            context.start();
+
+            // Ожидание завершения работы
+            Thread.sleep(5000);
+
+            // Остановка CamelContext
+            context.stop();
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
